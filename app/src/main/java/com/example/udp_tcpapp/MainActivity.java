@@ -120,7 +120,7 @@ public class MainActivity extends AppCompatActivity {
                     byte[] buffer;
 
                     try {
-                        // Para UDP
+                        // Para enviar por UDP
                         DatagramSocket socketudp = new DatagramSocket();
 
                         try {
