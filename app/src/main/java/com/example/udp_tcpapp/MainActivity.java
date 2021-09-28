@@ -83,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
                     Date date = new Date(time);
 
                     SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
+
                     String h1 = sdf.format(date);
 
                     Log.i("tiempo", "tiempo: " + h1);
