@@ -74,7 +74,7 @@ public class MainActivity extends AppCompatActivity {
 
                     Date d = new Date();
 
-                    CharSequence fecha = DateFormat.format("MMMM d, yyyy ", d.getTime());
+                    CharSequence fecha = DateFormat.format("yyyy-MM-dd", d.getTime());
                     String fecha_ = String.valueOf(fecha);
 
                     latLng = new LatLng(location.getLatitude(), location.getLongitude());
@@ -82,7 +82,7 @@ public class MainActivity extends AppCompatActivity {
                     Long time = location.getTime();
                     Date date = new Date(time);
 
-                    SimpleDateFormat sdf = new SimpleDateFormat("h:mm a");
+                    SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
                     String h1 = sdf.format(date);
 
                     Log.i("tiempo", "tiempo: " + h1);
