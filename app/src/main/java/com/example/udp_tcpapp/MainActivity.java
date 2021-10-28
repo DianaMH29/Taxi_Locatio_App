@@ -7,15 +7,16 @@ import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.graphics.BlendMode;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.format.DateFormat;
 import android.util.Log;
@@ -23,6 +24,7 @@ import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
@@ -34,6 +36,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -42,8 +45,8 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText ip1, udpport;
     private TextView lat, lon, hora1, fech, usuario1;
-    private Button bluetoothON, visibilidad1;
     private Socket user;
+    private Button bluetoothON, visibilidad1, viewDevices;
     private String smsave;
     private DatagramSocket socketudp;
     private Spinner placa1;
@@ -55,9 +58,16 @@ public class MainActivity extends AppCompatActivity {
     private final long MIN_DIST = 0;
     public LatLng latLng;
 
-
     private static final String TAG = "MainActivity";
     BluetoothAdapter mBluetoothAdapter;
+    //public ArrayList<BluetoothDevice> mBTDevices = new ArrayList<>();
+    //public DeviceListAdapter mDeviceListAdapter;
+    //ListView listDevices;
+
+    public ArrayList<BluetoothDevice> mBTDevices = new ArrayList<>();       //hold BluetoothDevices that are discovered
+    public DeviceListAdapter mDeviceListAdapter;
+    public ListView lvNewDevices;
+
 
     private final BroadcastReceiver mBroadcastReceiver1 = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
@@ -115,11 +125,27 @@ public class MainActivity extends AppCompatActivity {
 
         }
     };
+    private final BroadcastReceiver mBroadcastReceiver3 = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+
+            if(action.equals(BluetoothDevice.ACTION_FOUND)){
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                mBTDevices.add(device);
+                Log.d(TAG, "Recibiendo: "+device.getName() + " : " + device.getAddress());
+                mDeviceListAdapter = new DeviceListAdapter(context, R.layout.device_adapter_view, mBTDevices);
+                lvNewDevices.setAdapter(mDeviceListAdapter);
+            }
+
+        }
+    };
     @Override
     protected void onDestroy(){
         super.onDestroy();
         unregisterReceiver(mBroadcastReceiver1);
     }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -135,7 +161,9 @@ public class MainActivity extends AppCompatActivity {
         placa1 = findViewById(R.id.placa);
         bluetoothON = findViewById(R.id.bluetooth);
         visibilidad1 = findViewById(R.id.visibilidad);
-
+        viewDevices = findViewById(R.id.viewDevices1);
+        lvNewDevices = findViewById(R.id.ListDevices1);
+        mBTDevices = new ArrayList<>();
 
 
         ActivityCompat.requestPermissions(this, new String[]{
@@ -388,6 +416,14 @@ public class MainActivity extends AppCompatActivity {
                 visibilidad();
             }
         });
+
+        viewDevices.setOnClickListener(new View.OnClickListener(){
+            @Override
+            public void onClick(View view){
+                Log.d(TAG, "Haciendo el dispositivo visible por 300 segundos");
+                Discover();
+            }
+        });
     }
 
     public void enableDisableBT(){
@@ -420,6 +456,43 @@ public class MainActivity extends AppCompatActivity {
         IntentFilter intentFilter = new IntentFilter(mBluetoothAdapter.ACTION_SCAN_MODE_CHANGED);
         registerReceiver(mBroadcastReceiver2, intentFilter);
 
+    }
+
+    public void Discover(){
+        Log.d(TAG, "Buscando dispositivos no emparejados");
+
+        if(mBluetoothAdapter.isDiscovering()){
+            mBluetoothAdapter.cancelDiscovery();
+            Log.d(TAG, "Canceling discovery");
+
+            //Método para revisar permisos en manifest--debe hacerse para Android superior a lollipop
+            checkBTPermissions();
+
+            mBluetoothAdapter.startDiscovery();
+            IntentFilter discoverDevicesIntent = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+            registerReceiver(mBroadcastReceiver3, discoverDevicesIntent);
+        }
+        if(!mBluetoothAdapter.isDiscovering()){
+            //Método para revisar permisos en manifest--debe hacerse para Android superior a lollipop
+            checkBTPermissions();
+
+            mBluetoothAdapter.startDiscovery();
+            IntentFilter discoverDevicesIntent = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+            registerReceiver(mBroadcastReceiver3, discoverDevicesIntent);
+        }
+    }
+    private void checkBTPermissions(){
+        if(Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
+            int permissionCheck = this.checkSelfPermission("Manifest.permission.ACCESS_FINE_LOCATION");
+            permissionCheck += this.checkSelfPermission("Manifest.permission.ACCESS_COARSE_LOCATION");
+
+            if(permissionCheck != 0){
+                this.requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},1001);
+            }
+
+        }else{
+            Log.d(TAG, "No necesita permisos ya que su versión de SDK es inferior a lollipop");
+        }
     }
 
 }
