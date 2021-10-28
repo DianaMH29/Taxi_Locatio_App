@@ -133,6 +133,10 @@ public class MainActivity extends AppCompatActivity {
         //udpport = findViewById(R.id.port2);
         //usuario1 = findViewById(R.id.usuario);
         placa1 = findViewById(R.id.placa);
+        bluetoothON = findViewById(R.id.bluetooth);
+        visibilidad1 = findViewById(R.id.visibilidad);
+
+
 
         ActivityCompat.requestPermissions(this, new String[]{
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -376,6 +380,7 @@ public class MainActivity extends AppCompatActivity {
                 enableDisableBT();
             }
         });
+
         visibilidad1.setOnClickListener(new View.OnClickListener(){
             @Override
             public void onClick(View view){
@@ -384,6 +389,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
     public void enableDisableBT(){
         if(mBluetoothAdapter == null){
             Log.d(TAG, "El dispositivo no tiene/soporta Bluetooth");
