@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
@@ -21,6 +22,7 @@ import android.os.Bundle;
 import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -41,7 +43,7 @@ import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements AdapterView.OnItemClickListener {
 
     private EditText ip1, udpport;
     private TextView lat, lon, hora1, fech, usuario1;
@@ -140,10 +142,38 @@ public class MainActivity extends AppCompatActivity {
 
         }
     };
+    private final BroadcastReceiver mBroadcastReceiver4 = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+
+            if(action.equals(BluetoothDevice.ACTION_BOND_STATE_CHANGED)){
+                BluetoothDevice mDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+
+                //3 casos
+
+                if(mDevice.getBondState() == BluetoothDevice.BOND_BONDED){
+                    Log.d(TAG, "BOND_BONDED");
+                }
+                if(mDevice.getBondState() == BluetoothDevice.BOND_BONDING){
+                    Log.d(TAG, "BOND_BONDING");
+                }
+                if(mDevice.getBondState() == BluetoothDevice.BOND_NONE){
+                    Log.d(TAG, "BOND_NONE");
+                }
+
+            }
+
+        }
+    };
     @Override
     protected void onDestroy(){
         super.onDestroy();
         unregisterReceiver(mBroadcastReceiver1);
+        unregisterReceiver(mBroadcastReceiver2);
+        unregisterReceiver(mBroadcastReceiver3);
+        unregisterReceiver(mBroadcastReceiver4);
+
     }
 
     @Override
@@ -398,8 +428,14 @@ public class MainActivity extends AppCompatActivity {
 
         }, 0, 3000);
 
+
+        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
+        registerReceiver(mBroadcastReceiver4, filter);
+
         //Bluetooth
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+
+        lvNewDevices.setOnItemClickListener(MainActivity.this);
 
         bluetoothON.setOnClickListener(new View.OnClickListener(){
             @Override
@@ -495,6 +531,25 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+        //Cancelar discovery porque consume mucha memoria
+        mBluetoothAdapter.cancelDiscovery();
+
+        Log.d(TAG, "Diste click en un dispositivo");
+        String deviceName = mBTDevices.get(i).getName();
+        String deviceAddress = mBTDevices.get(i).getAddress();
+
+        Log.d(TAG, "Nombre del dispositivo: " + deviceName);
+        Log.d(TAG, "Dirección MAC: " + deviceAddress);
+
+        if(Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN_MR2){
+            Log.d(TAG, "Intentando conectarse con: " + deviceName);
+            mBTDevices.get(i).createBond();
+        }
+
+
+    }
 }
 
 
