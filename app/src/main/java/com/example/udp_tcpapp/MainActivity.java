@@ -1,13 +1,9 @@
 package com.example.udp_tcpapp;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -17,39 +13,46 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.View;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+
+import com.github.pires.obd.commands.engine.RPMCommand;
+import com.github.pires.obd.commands.protocol.EchoOffCommand;
+import com.github.pires.obd.commands.protocol.LineFeedOffCommand;
+import com.github.pires.obd.commands.protocol.SelectProtocolCommand;
+import com.github.pires.obd.commands.protocol.TimeoutCommand;
+import com.github.pires.obd.enums.ObdProtocols;
 import com.google.android.gms.maps.model.LatLng;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.UUID;
 
-public class MainActivity extends AppCompatActivity implements AdapterView.OnItemClickListener {
 
-    private EditText ip1, udpport;
-    private TextView lat, lon, hora1, fech, usuario1;
-    private Socket user;
-    private Button bluetoothON, visibilidad1, viewDevices;
-    private String smsave;
+public class MainActivity extends AppCompatActivity {
+
+    private TextView lat, lon, hora1, fech, rpm1;
+    private Button bluetoothON, visibilidad1;
     private DatagramSocket socketudp;
     private Spinner placa1;
     public String coords;
@@ -61,35 +64,32 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     public LatLng latLng;
 
     private static final String TAG = "MainActivity";
+    private String deviceAddress;
     BluetoothAdapter mBluetoothAdapter;
-    //public ArrayList<BluetoothDevice> mBTDevices = new ArrayList<>();
-    //public DeviceListAdapter mDeviceListAdapter;
-    //ListView listDevices;
-
-    public ArrayList<BluetoothDevice> mBTDevices = new ArrayList<>();       //hold BluetoothDevices that are discovered
-    public DeviceListAdapter mDeviceListAdapter;
-    public ListView lvNewDevices;
-
 
     private final BroadcastReceiver mBroadcastReceiver1 = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
 
-            if(action.equals(mBluetoothAdapter.ACTION_STATE_CHANGED)){
+            if (action.equals(mBluetoothAdapter.ACTION_STATE_CHANGED)) {
                 final int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, mBluetoothAdapter.ERROR);
 
-                switch (state){
+                switch (state) {
                     case BluetoothAdapter.STATE_OFF:
-                        Log.d(TAG, "onRecive: Estado OFF");
+                        Log.d(TAG, "onReceive: state OFF");
                         break;
                     case BluetoothAdapter.STATE_TURNING_OFF:
-                        Log.d(TAG, "onRecive:   TURNING OFF");
+                        Log.d(TAG, "onReceive:   TURNING OFF");
                         break;
                     case BluetoothAdapter.STATE_ON:
-                        Log.d(TAG, "onRecive: Estado ON");
+                        Log.d(TAG, "onReceive: state ON");
+
+                        //Solo en el estado encendido se llama al método:
+                        OBDConnection();
+
                         break;
                     case BluetoothAdapter.STATE_TURNING_ON:
-                        Log.d(TAG, "onRecive: TURNING ON");
+                        Log.d(TAG, "onReceive: TURNING ON");
                         break;
                 }
             }
@@ -97,83 +97,10 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         }
     };
 
-    private final BroadcastReceiver mBroadcastReceiver2 = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            final String action = intent.getAction();
-
-            if(action.equals(mBluetoothAdapter.ACTION_SCAN_MODE_CHANGED)){
-                int mode = intent.getIntExtra(BluetoothAdapter.EXTRA_SCAN_MODE, mBluetoothAdapter.ERROR);
-
-                switch (mode){
-                    //Dispositivo en modo visible
-                    case BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE:
-                        Log.d(TAG, "mBroadCastReceiver2: Discoverability enabled.");
-                        break;
-                    case BluetoothAdapter.SCAN_MODE_CONNECTABLE:
-                        Log.d(TAG, "mBroadCastReceiver2: Discoverability disable. Able to connections");
-                        break;
-                    case BluetoothAdapter.SCAN_MODE_NONE:
-                        Log.d(TAG, "mBroadCastReceiver2: Discoverability disable. No able to connections");
-                        break;
-                    case BluetoothAdapter.STATE_CONNECTING:
-                        Log.d(TAG, "mBroadCastReceiver2: CONNECTING...");
-                        break;
-                    case BluetoothAdapter.STATE_CONNECTED:
-                        Log.d(TAG, "mBroadCastReceiver2: CONNECTED");
-                        break;
-                }
-            }
-
-        }
-    };
-    private final BroadcastReceiver mBroadcastReceiver3 = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            final String action = intent.getAction();
-
-            if(action.equals(BluetoothDevice.ACTION_FOUND)){
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                mBTDevices.add(device);
-                Log.d(TAG, "Recibiendo: "+device.getName() + " : " + device.getAddress());
-                mDeviceListAdapter = new DeviceListAdapter(context, R.layout.device_adapter_view, mBTDevices);
-                lvNewDevices.setAdapter(mDeviceListAdapter);
-            }
-
-        }
-    };
-    private final BroadcastReceiver mBroadcastReceiver4 = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            final String action = intent.getAction();
-
-            if(action.equals(BluetoothDevice.ACTION_BOND_STATE_CHANGED)){
-                BluetoothDevice mDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-
-                //3 casos
-
-                if(mDevice.getBondState() == BluetoothDevice.BOND_BONDED){
-                    Log.d(TAG, "BOND_BONDED");
-                }
-                if(mDevice.getBondState() == BluetoothDevice.BOND_BONDING){
-                    Log.d(TAG, "BOND_BONDING");
-                }
-                if(mDevice.getBondState() == BluetoothDevice.BOND_NONE){
-                    Log.d(TAG, "BOND_NONE");
-                }
-
-            }
-
-        }
-    };
     @Override
-    protected void onDestroy(){
+    protected void onDestroy() {
         super.onDestroy();
         unregisterReceiver(mBroadcastReceiver1);
-        unregisterReceiver(mBroadcastReceiver2);
-        unregisterReceiver(mBroadcastReceiver3);
-        unregisterReceiver(mBroadcastReceiver4);
-
     }
 
     @Override
@@ -185,16 +112,9 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         hora1 = findViewById(R.id.hora);
         lon = findViewById(R.id.long1);
         lat = findViewById(R.id.lat1);
-        //p1 = findViewById(R.id.ip);
-        //udpport = findViewById(R.id.port2);
-        //usuario1 = findViewById(R.id.usuario);
+        rpm1 = findViewById(R.id.rpm);
         placa1 = findViewById(R.id.placa);
         bluetoothON = findViewById(R.id.bluetooth);
-        visibilidad1 = findViewById(R.id.visibilidad);
-        viewDevices = findViewById(R.id.viewDevices1);
-        lvNewDevices = findViewById(R.id.ListDevices1);
-        mBTDevices = new ArrayList<>();
-
 
         ActivityCompat.requestPermissions(this, new String[]{
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -202,8 +122,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         }, PackageManager.PERMISSION_GRANTED);
 
         //Para alertar si se tiene el GPS apagado
-
-        LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
+        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
         boolean gps_enabled = true;
         boolean network_enabled = true;
@@ -219,26 +138,27 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
             e.printStackTrace();
         }
         if (!gps_enabled && !network_enabled) {
-            new AlertDialog.Builder(MainActivity.this).setMessage("El GPS está apagado").setNegativeButton( "Ok" , null ).show() ;
+            new AlertDialog.Builder(MainActivity.this).setMessage("Por favor, habilite su ubicación").setNegativeButton("Aceptar", null).show();
         }
 
 
         //Poner datos en el spinner
-        String [] placas = {"WXA834", "TLO847", "GRS523", "WPB289", "TRU189"};
-        ArrayAdapter <String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, placas);
+        String[] placas = {"WXA834", "TLO847", "GRS523", "WPB289", "TRU189"};
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, placas);
         placa1.setAdapter(adapter);
 
 
         locationListener = new LocationListener() {
 
-
             //Para que la app no se cierre si el GPS está apagado
             @Override
             public void onProviderEnabled(@NonNull String provider) {
             }
+
             @Override
             public void onProviderDisabled(@NonNull String provider) {
             }
+
             @Override
             public void onStatusChanged(String provider, int status, Bundle extras) {
             }
@@ -269,17 +189,19 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
                     String nplaca = "";
 
-                    if (seleccion.equals("WXA834")){
-                         nplaca = "WXA834";
-                    } else  if (seleccion.equals("TLO847")) {
-                         nplaca = "TLO847";
-                    } else  if (seleccion.equals("GRS523")) {
-                         nplaca = "GRS523";
-                    } else  if (seleccion.equals("WPB289")) {
-                         nplaca = "WPB289";
-                    } else  if (seleccion.equals("TRU189")) {
-                         nplaca = "TRU189";
+                    if (seleccion.equals("WXA834")) {
+                        nplaca = "WXA834";
+                    } else if (seleccion.equals("TLO847")) {
+                        nplaca = "TLO847";
+                    } else if (seleccion.equals("GRS523")) {
+                        nplaca = "GRS523";
+                    } else if (seleccion.equals("WPB289")) {
+                        nplaca = "WPB289";
+                    } else if (seleccion.equals("TRU189")) {
+                        nplaca = "TRU189";
                     }
+
+                   //String RPM = OBDGetData();
 
                     coords = myLatitude + "," + myLatitude + "," + myLongitude + "," + h1 + "," + fecha_ + "," + fecha_ + "," + nplaca + "," + nplaca;
                     Log.i("Coords", "Coords: " + coords);
@@ -288,6 +210,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                     lon.setText(myLongitude);
                     hora1.setText(h1);
                     fech.setText(fecha_);
+                    rpm1.setText(String.format(OBDGetData()));
 
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -326,7 +249,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                             socketudp.send(peticion);
                             Log.i("Confirmation", "Packet Sent!");
 
-                        }catch(NumberFormatException ex){
+                        } catch (NumberFormatException ex) {
 
                         }
 
@@ -340,7 +263,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
                         try {
 
-                            String direccion = "3.129.148.31";
+                            String direccion = "18.222.202.131";
                             InetAddress address = InetAddress.getByName(direccion);
                             buffer = coords.getBytes();
 
@@ -348,7 +271,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                             socketudp.send(peticion);
                             Log.i("Confirmation", "Packet Sent!");
 
-                        }catch(NumberFormatException ex){
+                        } catch (NumberFormatException ex) {
 
                         }
 
@@ -370,7 +293,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                             socketudp.send(peticion);
                             Log.i("Confirmation", "Packet Sent!");
 
-                        }catch(NumberFormatException ex){
+                        } catch (NumberFormatException ex) {
 
                         }
 
@@ -392,7 +315,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                             socketudp.send(peticion);
                             Log.i("Confirmation", "Packet Sent!");
 
-                        }catch(NumberFormatException ex){
+                        } catch (NumberFormatException ex) {
 
                         }
 
@@ -413,7 +336,7 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                             socketudp.send(peticion);
                             Log.i("Confirmation", "Packet Sent!");
 
-                        }catch(NumberFormatException ex){
+                        } catch (NumberFormatException ex) {
 
                         }
 
@@ -428,45 +351,25 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
         }, 0, 3000);
 
-
-        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
-        registerReceiver(mBroadcastReceiver4, filter);
-
-        //Bluetooth
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
-        lvNewDevices.setOnItemClickListener(MainActivity.this);
-
-        bluetoothON.setOnClickListener(new View.OnClickListener(){
+        bluetoothON.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View view){
+            public void onClick(View view) {
                 Log.d(TAG, "onClick: enabling/disabling bluetooth");
-                enableDisableBT();
+                enableDisableBT(); //Método para encender o apagar el BT
             }
         });
 
-        visibilidad1.setOnClickListener(new View.OnClickListener(){
-            @Override
-            public void onClick(View view){
-                Log.d(TAG, "Haciendo el dispositivo visible por 300 segundos");
-                visibilidad();
-            }
-        });
-
-        viewDevices.setOnClickListener(new View.OnClickListener(){
-            @Override
-            public void onClick(View view){
-                Log.d(TAG, "Haciendo el dispositivo visible por 300 segundos");
-                Discover();
-            }
-        });
     }
 
-    public void enableDisableBT(){
-        if(mBluetoothAdapter == null){
+    public void enableDisableBT() {
+
+        if (mBluetoothAdapter == null) {
             Log.d(TAG, "El dispositivo no tiene/soporta Bluetooth");
         }
-        if(!mBluetoothAdapter.isEnabled()){
+        if (!mBluetoothAdapter.isEnabled()) {
+
             Log.d(TAG, "Enabling Bluetooth");
             Intent enableBTIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivity(enableBTIntent);
@@ -474,85 +377,77 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
             //Ver los cambios de estado del bluetooth, si se enciende o apaga externamente
             IntentFilter BTIntent = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
             registerReceiver(mBroadcastReceiver1, BTIntent);
+
         }
-        if(mBluetoothAdapter.isEnabled()){
+        if (mBluetoothAdapter.isEnabled()) {
             Log.d(TAG, "disabling Bluetooth");
             mBluetoothAdapter.disable();
 
             IntentFilter BTIntent = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
             registerReceiver(mBroadcastReceiver1, BTIntent);
         }
-    }
-    public void visibilidad(){
-
-        Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
-        discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300);
-        startActivity(discoverableIntent);
-
-        IntentFilter intentFilter = new IntentFilter(mBluetoothAdapter.ACTION_SCAN_MODE_CHANGED);
-        registerReceiver(mBroadcastReceiver2, intentFilter);
 
     }
 
-    public void Discover(){
-        Log.d(TAG, "Buscando dispositivos no emparejados");
+   public void OBDConnection(){
+        
+       ArrayList deviceStrs = new ArrayList();
+       final ArrayList devices = new ArrayList();
 
-        if(mBluetoothAdapter.isDiscovering()){
-            mBluetoothAdapter.cancelDiscovery();
-            Log.d(TAG, "Canceling discovery");
+       BluetoothAdapter BTAdapter = BluetoothAdapter.getDefaultAdapter();
+       Set<BluetoothDevice> pairedDevices = BTAdapter.getBondedDevices();
+       if (pairedDevices.size() > 0) {
+           for (BluetoothDevice device : pairedDevices) {
+               deviceStrs.add(device.getName() + "\n" + device.getAddress());
+               devices.add(device.getAddress());
+           }
+       }
 
-            //Método para revisar permisos en manifest--debe hacerse para Android superior a lollipop
-            checkBTPermissions();
+       final AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
 
-            mBluetoothAdapter.startDiscovery();
-            IntentFilter discoverDevicesIntent = new IntentFilter(BluetoothDevice.ACTION_FOUND);
-            registerReceiver(mBroadcastReceiver3, discoverDevicesIntent);
-        }
-        if(!mBluetoothAdapter.isDiscovering()){
-            //Método para revisar permisos en manifest--debe hacerse para Android superior a lollipop
-            checkBTPermissions();
+       ArrayAdapter adapter = new ArrayAdapter(this, android.R.layout.select_dialog_singlechoice,
+               deviceStrs.toArray(new String[deviceStrs.size()]));
 
-            mBluetoothAdapter.startDiscovery();
-            IntentFilter discoverDevicesIntent = new IntentFilter(BluetoothDevice.ACTION_FOUND);
-            registerReceiver(mBroadcastReceiver3, discoverDevicesIntent);
-        }
+       alertDialog.setSingleChoiceItems(adapter, -1, new DialogInterface.OnClickListener() {
+           @Override
+           public void onClick(DialogInterface dialog, int which) {
+               dialog.dismiss();
+               int position = ((AlertDialog) dialog).getListView().getCheckedItemPosition();
+               deviceAddress = (String) devices.get(position);
+               Toast.makeText(getApplicationContext(), "Dispositivo OBDII conectado.", Toast.LENGTH_SHORT).show();
+           }
+       });
+
+       alertDialog.setTitle("Seleecione el dispositivo OBDII:");
+       alertDialog.show();
+   }
+
+    public String OBDGetData() throws IOException, InterruptedException {
+
+        BluetoothAdapter BTAdapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothDevice device = BTAdapter.getRemoteDevice(deviceAddress);
+        UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+
+        BluetoothSocket socket = null;
+
+        socket = device.createInsecureRfcommSocketToServiceRecord(uuid);
+        socket.connect();
+
+        // Iniciar OBDII.
+        new EchoOffCommand().run(socket.getInputStream(), socket.getOutputStream());
+        new LineFeedOffCommand().run(socket.getInputStream(), socket.getOutputStream());
+        new TimeoutCommand(60).run(socket.getInputStream(), socket.getOutputStream());
+        new SelectProtocolCommand(ObdProtocols.AUTO).run(socket.getInputStream(), socket.getOutputStream());
+
+        // Obtener revoluciones por minuto.
+        RPMCommand engineRpmCommand = new RPMCommand();
+        engineRpmCommand.run(socket.getInputStream(), socket.getOutputStream());
+        String rpm = engineRpmCommand.getFormattedResult().replace("RPM", "");
+
+        return rpm;
     }
-    private void checkBTPermissions(){
-        if(Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
-            int permissionCheck = this.checkSelfPermission("Manifest.permission.ACCESS_FINE_LOCATION");
-            permissionCheck += this.checkSelfPermission("Manifest.permission.ACCESS_COARSE_LOCATION");
 
-            if(permissionCheck != 0){
-                this.requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},1001);
-            }
-
-        }else{
-            Log.d(TAG, "No necesita permisos ya que su versión de SDK es inferior a lollipop");
-        }
-    }
-
-    @Override
-    public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-        //Cancelar discovery porque consume mucha memoria
-        mBluetoothAdapter.cancelDiscovery();
-
-        Log.d(TAG, "Diste click en un dispositivo");
-        String deviceName = mBTDevices.get(i).getName();
-        String deviceAddress = mBTDevices.get(i).getAddress();
-
-        Log.d(TAG, "Nombre del dispositivo: " + deviceName);
-        Log.d(TAG, "Dirección MAC: " + deviceAddress);
-
-        if(Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN_MR2){
-            Log.d(TAG, "Intentando conectarse con: " + deviceName);
-            mBTDevices.get(i).createBond();
-        }
-
-
-    }
 }
-
-
 
 
 
